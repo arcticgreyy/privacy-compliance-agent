@@ -179,4 +179,4 @@ The deploy script creates two Cloud Run services:
 
 ## License
 
-Private — all rights reserved.
+[Business Source License 1.1](LICENSE) — free for internal use; commercial hosted privacy compliance services require a separate license. Converts to Apache 2.0 on June 4, 2030.
