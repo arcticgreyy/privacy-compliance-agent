@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { identifyVendor } from "@/lib/scraper";
+import { analyzeScan } from "@/lib/ai/analyze-scan";
 import type { ScanResult } from "@/lib/scraper/types";
+
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -49,7 +52,6 @@ export async function POST(request: NextRequest) {
 
   await prisma.observedTag.createMany({ data: observedTagData });
 
-  // Update scan with policy info and mark as ANALYZING (AI step next)
   await prisma.scan.update({
     where: { id: scanId },
     data: {
@@ -58,12 +60,39 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  // TODO: Phase 3 will trigger the AI analysis step here
-  // For now, mark as completed
+  // Run AI analysis
+  const analysis = await analyzeScan(result);
+
+  if (analysis.disclosedVendors.length > 0) {
+    await prisma.disclosedVendor.createMany({
+      data: analysis.disclosedVendors.map((v) => ({
+        scanId,
+        vendorName: v.vendorName,
+        purposeExtracted: v.purpose,
+        dataTypes: v.dataTypes,
+      })),
+    });
+  }
+
+  if (analysis.violations.length > 0) {
+    await prisma.violation.createMany({
+      data: analysis.violations.map((v) => ({
+        scanId,
+        severity: v.severity,
+        category: v.category,
+        description: v.description,
+        remediationSteps: v.remediationSteps,
+        vendorName: v.vendorName,
+        evidence: v.description,
+      })),
+    });
+  }
+
   await prisma.scan.update({
     where: { id: scanId },
     data: {
       status: "COMPLETED",
+      healthScore: analysis.healthScore,
       completedAt: new Date(),
     },
   });
@@ -71,5 +100,8 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     observedTags: observedTagData.length,
+    disclosedVendors: analysis.disclosedVendors.length,
+    violations: analysis.violations.length,
+    healthScore: analysis.healthScore,
   });
 }
