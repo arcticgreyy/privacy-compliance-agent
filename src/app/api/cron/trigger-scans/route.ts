@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { dispatchScan } from "@/lib/queue";
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -39,18 +40,25 @@ export async function POST(request: NextRequest) {
     }
   });
 
-  const createdScans = await Promise.all(
-    dueWebsites.map((site) =>
-      prisma.scan.create({
+  const results = await Promise.all(
+    dueWebsites.map(async (site) => {
+      const scan = await prisma.scan.create({
         data: { websiteId: site.id, status: "PENDING" },
-      })
-    )
+      });
+
+      const dispatch = await dispatchScan(scan.id);
+
+      return {
+        scanId: scan.id,
+        websiteId: site.id,
+        domain: site.domain,
+        ...dispatch,
+      };
+    })
   );
 
-  // TODO: Push each scan to Cloud Tasks queue for the Playwright worker
-
   return NextResponse.json({
-    triggered: createdScans.length,
-    scanIds: createdScans.map((s) => s.id),
+    triggered: results.length,
+    results,
   });
 }

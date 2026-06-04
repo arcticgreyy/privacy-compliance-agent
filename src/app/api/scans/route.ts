@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { dispatchScan } from "@/lib/queue";
 
 export async function GET(request: NextRequest) {
   const websiteId = request.nextUrl.searchParams.get("websiteId");
@@ -49,8 +50,7 @@ export async function POST(request: NextRequest) {
     data: { websiteId, status: "PENDING" },
   });
 
-  // TODO: In Phase 2, push to Cloud Tasks to trigger Playwright worker
-  // For now, return the created scan so the frontend can track it
+  const dispatch = await dispatchScan(scan.id);
 
-  return NextResponse.json(scan, { status: 201 });
+  return NextResponse.json({ ...scan, dispatch }, { status: 201 });
 }
