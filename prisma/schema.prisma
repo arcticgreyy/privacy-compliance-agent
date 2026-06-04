@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Multi-Tenant: Organizations & Users ────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  User[]
+  websites Website[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String?
+  hashedPassword String?
+  role           UserRole @default(MEMBER)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// ─── Websites & Scan Configuration ──────────────────────────────────
+
+model Website {
+  id            String        @id @default(cuid())
+  domain        String
+  scanFrequency ScanFrequency @default(WEEKLY)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  scans Scan[]
+
+  @@unique([organizationId, domain])
+  @@index([organizationId])
+  @@map("websites")
+}
+
+enum ScanFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+// ─── Scan History ───────────────────────────────────────────────────
+
+model Scan {
+  id              String     @id @default(cuid())
+  status          ScanStatus @default(PENDING)
+  healthScore     Int?
+  policyUrl       String?
+  policyTextHash  String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  errorMessage    String?
+  createdAt       DateTime   @default(now())
+
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  disclosedVendors DisclosedVendor[]
+  observedTags     ObservedTag[]
+  violations       Violation[]
+
+  @@index([websiteId])
+  @@index([status])
+  @@map("scans")
+}
+
+enum ScanStatus {
+  PENDING
+  RUNNING
+  ANALYZING
+  COMPLETED
+  FAILED
+}
+
+// ─── LLM-Extracted: Vendors Disclosed in Privacy Policy ─────────────
+
+model DisclosedVendor {
+  id               String  @id @default(cuid())
+  vendorName       String
+  purposeExtracted String?
+  dataTypes        String?
+  policyExcerpt    String?
+
+  scanId String
+  scan   Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@map("disclosed_vendors")
+}
+
+// ─── Playwright-Captured: Observed Network Tags ─────────────────────
+
+model ObservedTag {
+  id             String  @id @default(cuid())
+  url            String
+  hostname       String
+  vendorName     String?
+  resourceType   String?
+  method         String?
+  queryParams    Json?
+  postBody       Json?
+  rawPayloadJson Json?
+  initiator      String?
+
+  scanId String
+  scan   Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([vendorName])
+  @@map("observed_tags")
+}
+
+// ─── AI-Generated: Compliance Violations ────────────────────────────
+
+model Violation {
+  id               String          @id @default(cuid())
+  severity         ViolationSeverity
+  category         ViolationCategory
+  description      String
+  evidence         String?
+  remediationSteps String?
+
+  observedTagId String?
+  vendorName    String?
+
+  scanId String
+  scan   Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([severity])
+  @@map("violations")
+}
+
+enum ViolationSeverity {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ViolationCategory {
+  UNDISCLOSED_TRACKER
+  PII_LEAKAGE
+  UNDISCLOSED_DATA_SHARING
+  MISSING_CONSENT
+  POLICY_MISMATCH
+}
