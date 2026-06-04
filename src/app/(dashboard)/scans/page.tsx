@@ -17,7 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -25,8 +24,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScanStatusBadge } from "@/components/dashboard/scan-status-badge";
 import { ScanSearch } from "lucide-react";
-import type { Scan, Website, ViolationSeverity } from "@/types";
+import type { Scan, Website } from "@/types";
 
 type ScanRow = Scan & {
   _count: {
@@ -37,20 +37,6 @@ type ScanRow = Scan & {
 };
 
 const DEMO_ORG_ID = "demo-org-001";
-
-function statusColor(status: string) {
-  switch (status) {
-    case "COMPLETED":
-      return "default";
-    case "RUNNING":
-    case "ANALYZING":
-      return "secondary";
-    case "FAILED":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
 
 export default function ScansPage() {
   const [websites, setWebsites] = useState<Website[]>([]);
@@ -77,7 +63,9 @@ export default function ScansPage() {
           fetch(`/api/scans?websiteId=${w.id}`).then((r) => r.json())
         )
       );
-      setScans(allScans.flat());
+      setScans(allScans.flat().sort((a: ScanRow, b: ScanRow) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ));
     } else {
       const res = await fetch(`/api/scans?websiteId=${selectedWebsite}`);
       setScans(await res.json());
@@ -95,10 +83,13 @@ export default function ScansPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Scan Reports</h1>
           <p className="text-muted-foreground mt-1">
-            View compliance scan history and results.
+            View compliance scan history and detailed reports.
           </p>
         </div>
-        <Select value={selectedWebsite} onValueChange={(v) => setSelectedWebsite(v ?? "all")}>
+        <Select
+          value={selectedWebsite}
+          onValueChange={(v) => setSelectedWebsite(v ?? "all")}
+        >
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Filter by website" />
           </SelectTrigger>
@@ -132,6 +123,12 @@ export default function ScansPage() {
               <p className="text-sm text-muted-foreground max-w-sm mt-1">
                 Trigger a scan from the Websites page to see results here.
               </p>
+              <Link
+                href="/websites"
+                className="mt-4 text-sm text-primary hover:underline"
+              >
+                Go to Websites &rarr;
+              </Link>
             </div>
           ) : (
             <Table>
@@ -141,6 +138,7 @@ export default function ScansPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Health</TableHead>
                   <TableHead>Tags</TableHead>
+                  <TableHead>Vendors</TableHead>
                   <TableHead>Violations</TableHead>
                   <TableHead className="text-right">Details</TableHead>
                 </TableRow>
@@ -148,19 +146,40 @@ export default function ScansPage() {
               <TableBody>
                 {scans.map((scan) => (
                   <TableRow key={scan.id}>
-                    <TableCell>
+                    <TableCell className="text-muted-foreground">
                       {new Date(scan.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusColor(scan.status)}>
-                        {scan.status}
-                      </Badge>
+                      <ScanStatusBadge status={scan.status} />
                     </TableCell>
                     <TableCell>
-                      {scan.healthScore != null ? `${scan.healthScore}/100` : "—"}
+                      {scan.healthScore != null ? (
+                        <span
+                          className={
+                            scan.healthScore >= 80
+                              ? "text-emerald-600 font-semibold"
+                              : scan.healthScore >= 60
+                                ? "text-yellow-600 font-semibold"
+                                : "text-red-600 font-semibold"
+                          }
+                        >
+                          {scan.healthScore}/100
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell>{scan._count.observedTags}</TableCell>
-                    <TableCell>{scan._count.violations}</TableCell>
+                    <TableCell>{scan._count.disclosedVendors}</TableCell>
+                    <TableCell>
+                      {scan._count.violations > 0 ? (
+                        <span className="text-destructive font-medium">
+                          {scan._count.violations}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Link
                         href={`/scans/${scan.id}`}

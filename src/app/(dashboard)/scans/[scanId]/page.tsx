@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -19,19 +20,37 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { HealthScoreRing } from "@/components/dashboard/health-score-ring";
+import { ScanStatusBadge } from "@/components/dashboard/scan-status-badge";
+import { SeverityBreakdown } from "@/components/dashboard/severity-breakdown";
+import {
+  ArrowLeft,
+  ShieldAlert,
+  Eye,
+  FileText,
+  AlertTriangle,
+} from "lucide-react";
 import type { ScanWithRelations } from "@/types";
 
-function severityColor(severity: string) {
+function severityVariant(severity: string) {
   switch (severity) {
     case "HIGH":
-      return "destructive";
+      return "destructive" as const;
     case "MEDIUM":
-      return "default";
+      return "default" as const;
     case "LOW":
-      return "secondary";
+      return "secondary" as const;
     default:
-      return "outline";
+      return "outline" as const;
   }
+}
+
+function categoryLabel(category: string): string {
+  return category
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default function ScanReportPage() {
@@ -50,143 +69,279 @@ export default function ScanReportPage() {
 
   if (loading) {
     return (
-      <p className="text-muted-foreground py-12 text-center">
-        Loading scan report...
-      </p>
+      <div className="flex items-center justify-center py-24">
+        <p className="text-muted-foreground">Loading scan report...</p>
+      </div>
     );
   }
 
   if (!scan) {
     return (
-      <p className="text-muted-foreground py-12 text-center">
-        Scan not found.
-      </p>
+      <div className="flex flex-col items-center justify-center py-24">
+        <p className="text-muted-foreground">Scan not found.</p>
+        <Link href="/scans" className="text-primary hover:underline mt-2 text-sm">
+          Back to Scan History
+        </Link>
+      </div>
     );
   }
 
   const disclosedNames = new Set(
     scan.disclosedVendors.map((v) => v.vendorName.toLowerCase())
   );
-  const observedNames = [
+  const observedVendorNames = [
     ...new Set(
       scan.observedTags
         .map((t) => t.vendorName)
         .filter((n): n is string => n !== null)
     ),
   ];
-  const undisclosed = observedNames.filter(
+  const undisclosed = observedVendorNames.filter(
     (name) => !disclosedNames.has(name.toLowerCase())
   );
 
+  const highCount = scan.violations.filter((v) => v.severity === "HIGH").length;
+  const medCount = scan.violations.filter((v) => v.severity === "MEDIUM").length;
+  const lowCount = scan.violations.filter((v) => v.severity === "LOW").length;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Scan Report</h1>
-        <p className="text-muted-foreground mt-1">
-          {scan.website.domain} &mdash;{" "}
-          {new Date(scan.createdAt).toLocaleString()}
-        </p>
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <Link
+            href="/scans"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-2"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Back to Scans
+          </Link>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {scan.website.domain}
+          </h1>
+          <div className="flex items-center gap-3 mt-1">
+            <ScanStatusBadge status={scan.status} />
+            <span className="text-sm text-muted-foreground">
+              {new Date(scan.createdAt).toLocaleString()}
+            </span>
+            {scan.policyUrl && (
+              <a
+                href={scan.policyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <FileText className="h-3 w-3" />
+                Privacy Policy
+              </a>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Health Score</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">
-              {scan.healthScore ?? "—"}
-              {scan.healthScore !== null && (
-                <span className="text-lg text-muted-foreground">/100</span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
+      {scan.errorMessage && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Scan Error</AlertTitle>
+          <AlertDescription>{scan.errorMessage}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Score + summary cards */}
+      <div className="grid gap-4 md:grid-cols-5">
+        <Card className="md:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
-              Observed Tags
+              Compliance Score
             </CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-center py-4">
+            <HealthScoreRing
+              score={scan.healthScore}
+              size={140}
+              strokeWidth={12}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Observed Tags</CardTitle>
+            <Eye className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{scan.observedTags.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              third-party requests
+            </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
               Disclosed Vendors
             </CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
               {scan.disclosedVendors.length}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              in privacy policy
+            </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Violations</CardTitle>
+            <ShieldAlert className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-destructive">
               {scan.violations.length}
             </div>
+            <div className="mt-2">
+              <SeverityBreakdown high={highCount} medium={medCount} low={lowCount} />
+            </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Tabs */}
       <Tabs defaultValue="violations">
         <TabsList>
           <TabsTrigger value="violations">
             Violations ({scan.violations.length})
           </TabsTrigger>
-          <TabsTrigger value="observed">
+          <TabsTrigger value="comparison">
             Observed vs Disclosed
           </TabsTrigger>
-          <TabsTrigger value="tags">All Observed Tags</TabsTrigger>
+          <TabsTrigger value="tags">
+            All Tags ({scan.observedTags.length})
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="violations" className="mt-4">
+        {/* Violations Tab */}
+        <TabsContent value="violations" className="mt-4 space-y-3">
+          {scan.violations.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <ShieldAlert className="h-10 w-10 text-emerald-500 mx-auto mb-3" />
+                <h3 className="font-semibold">No Violations Detected</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  This scan found no compliance issues. Great job!
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            scan.violations.map((v) => (
+              <Card key={v.id}>
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={severityVariant(v.severity)}>
+                          {v.severity}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {categoryLabel(v.category)}
+                        </Badge>
+                        {v.vendorName && (
+                          <span className="text-sm font-medium">
+                            {v.vendorName}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm">{v.description}</p>
+                      {v.remediationSteps && (
+                        <div className="rounded-md bg-muted/50 p-3 mt-2">
+                          <p className="text-xs font-medium text-muted-foreground mb-1">
+                            Remediation
+                          </p>
+                          <p className="text-sm">{v.remediationSteps}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        {/* Comparison Tab */}
+        <TabsContent value="comparison" className="mt-4 space-y-4">
+          {undisclosed.length > 0 && (
+            <Alert variant="destructive">
+              <ShieldAlert className="h-4 w-4" />
+              <AlertTitle>
+                {undisclosed.length} Undisclosed Tracker
+                {undisclosed.length !== 1 && "s"}
+              </AlertTitle>
+              <AlertDescription>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {undisclosed.map((name) => (
+                    <Badge key={name} variant="destructive">
+                      {name}
+                    </Badge>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Card>
             <CardHeader>
-              <CardTitle>Compliance Violations</CardTitle>
+              <CardTitle>Disclosed Vendors</CardTitle>
               <CardDescription>
-                AI-detected issues requiring attention.
+                Vendors explicitly named in the privacy policy.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {scan.violations.length === 0 ? (
-                <p className="text-muted-foreground py-8 text-center">
-                  No violations detected. Run a scan to analyze compliance.
+              {scan.disclosedVendors.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  {scan.policyUrl
+                    ? "No specific vendor names were extracted from the privacy policy."
+                    : "No privacy policy was found on the website."}
                 </p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Remediation</TableHead>
+                      <TableHead>Vendor</TableHead>
+                      <TableHead>Stated Purpose</TableHead>
+                      <TableHead>Data Types</TableHead>
+                      <TableHead>Detected on Site?</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {scan.violations.map((v) => (
-                      <TableRow key={v.id}>
-                        <TableCell>
-                          <Badge variant={severityColor(v.severity)}>
-                            {v.severity}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {v.category}
-                        </TableCell>
-                        <TableCell>{v.description}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {v.remediationSteps ?? "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {scan.disclosedVendors.map((v) => {
+                      const found = observedVendorNames.some(
+                        (n) =>
+                          n.toLowerCase() === v.vendorName.toLowerCase()
+                      );
+                      return (
+                        <TableRow key={v.id}>
+                          <TableCell className="font-medium">
+                            {v.vendorName}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {v.purposeExtracted ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-xs">
+                            {v.dataTypes ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={found ? "default" : "secondary"}>
+                              {found ? "Yes" : "Not detected"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -194,92 +349,19 @@ export default function ScanReportPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="observed" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Observed vs Disclosed</CardTitle>
-              <CardDescription>
-                Comparing tags found on the site against the privacy policy.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {undisclosed.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold text-destructive mb-2">
-                      Undisclosed Trackers ({undisclosed.length})
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {undisclosed.map((name) => (
-                        <Badge key={name} variant="destructive">
-                          {name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <h4 className="font-semibold mb-2">
-                    Disclosed Vendors ({scan.disclosedVendors.length})
-                  </h4>
-                  {scan.disclosedVendors.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No vendor disclosures extracted yet.
-                    </p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Vendor</TableHead>
-                          <TableHead>Purpose</TableHead>
-                          <TableHead>Found on Site?</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {scan.disclosedVendors.map((v) => {
-                          const found = observedNames.some(
-                            (n) =>
-                              n.toLowerCase() === v.vendorName.toLowerCase()
-                          );
-                          return (
-                            <TableRow key={v.id}>
-                              <TableCell className="font-medium">
-                                {v.vendorName}
-                              </TableCell>
-                              <TableCell>
-                                {v.purposeExtracted ?? "—"}
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={found ? "default" : "secondary"}
-                                >
-                                  {found ? "Yes" : "Not detected"}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
+        {/* All Tags Tab */}
         <TabsContent value="tags" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>All Observed Tags</CardTitle>
+              <CardTitle>Observed Network Tags</CardTitle>
               <CardDescription>
-                Third-party network requests captured during the scan.
+                Third-party requests captured during the scan. Grouped by vendor.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {scan.observedTags.length === 0 ? (
                 <p className="text-muted-foreground py-8 text-center">
-                  No tags observed yet. Run a scan to capture network activity.
+                  No third-party tags were observed during this scan.
                 </p>
               ) : (
                 <Table>
@@ -288,6 +370,7 @@ export default function ScanReportPage() {
                       <TableHead>Vendor</TableHead>
                       <TableHead>Hostname</TableHead>
                       <TableHead>Type</TableHead>
+                      <TableHead>Method</TableHead>
                       <TableHead>Disclosed?</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -299,18 +382,35 @@ export default function ScanReportPage() {
                       return (
                         <TableRow key={tag.id}>
                           <TableCell className="font-medium">
-                            {tag.vendorName ?? "Unknown"}
+                            {tag.vendorName ?? (
+                              <span className="text-muted-foreground italic">
+                                Unknown
+                              </span>
+                            )}
                           </TableCell>
-                          <TableCell className="font-mono text-xs">
+                          <TableCell className="font-mono text-xs max-w-[200px] truncate">
                             {tag.hostname}
                           </TableCell>
-                          <TableCell>{tag.resourceType ?? "—"}</TableCell>
                           <TableCell>
-                            <Badge
-                              variant={disclosed ? "default" : "destructive"}
-                            >
-                              {disclosed ? "Yes" : "No"}
+                            <Badge variant="outline" className="text-xs">
+                              {tag.resourceType ?? "—"}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {tag.method ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            {tag.vendorName ? (
+                              <Badge
+                                variant={disclosed ? "default" : "destructive"}
+                              >
+                                {disclosed ? "Yes" : "No"}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            )}
                           </TableCell>
                         </TableRow>
                       );

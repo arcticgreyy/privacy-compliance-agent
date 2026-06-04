@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -19,7 +20,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AddWebsiteDialog } from "@/components/websites/add-website-dialog";
-import { Globe, Play } from "lucide-react";
+import { ScanStatusBadge } from "@/components/dashboard/scan-status-badge";
+import { Globe, Play, ExternalLink } from "lucide-react";
 import type { WebsiteWithScans } from "@/types";
 
 const DEMO_ORG_ID = "demo-org-001";
@@ -27,6 +29,7 @@ const DEMO_ORG_ID = "demo-org-001";
 export default function WebsitesPage() {
   const [websites, setWebsites] = useState<WebsiteWithScans[]>([]);
   const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState<string | null>(null);
 
   const fetchWebsites = useCallback(async () => {
     setLoading(true);
@@ -47,12 +50,17 @@ export default function WebsitesPage() {
   }, [fetchWebsites]);
 
   async function triggerScan(websiteId: string) {
-    await fetch("/api/scans", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ websiteId }),
-    });
-    fetchWebsites();
+    setTriggering(websiteId);
+    try {
+      await fetch("/api/scans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ websiteId }),
+      });
+      await fetchWebsites();
+    } finally {
+      setTriggering(null);
+    }
   }
 
   return (
@@ -87,7 +95,8 @@ export default function WebsitesPage() {
               <Globe className="h-12 w-12 text-muted-foreground/50 mb-4" />
               <h3 className="font-semibold text-lg">No websites yet</h3>
               <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                Click &quot;Add Website&quot; to register your first domain.
+                Click &quot;Add Website&quot; to register your first domain for
+                privacy compliance monitoring.
               </p>
             </div>
           ) : (
@@ -95,44 +104,87 @@ export default function WebsitesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Domain</TableHead>
-                  <TableHead>Scan Frequency</TableHead>
+                  <TableHead>Frequency</TableHead>
                   <TableHead>Last Scan</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Health</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {websites.map((site) => {
-                  const lastScan = site.scans[0];
+                  const lastScan = site.scans[0] as
+                    | (typeof site.scans)[0] & { healthScore?: number | null }
+                    | undefined;
                   return (
                     <TableRow key={site.id}>
-                      <TableCell className="font-medium">
-                        {site.domain}
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{site.domain}</span>
+                          <a
+                            href={`https://${site.domain}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{site.scanFrequency}</Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {site.scanFrequency}
+                        </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-muted-foreground">
                         {lastScan
                           ? new Date(lastScan.createdAt).toLocaleDateString()
                           : "Never"}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={site.isActive ? "default" : "secondary"}
-                        >
-                          {site.isActive ? "Active" : "Paused"}
-                        </Badge>
+                        {lastScan ? (
+                          <ScanStatusBadge status={lastScan.status} />
+                        ) : (
+                          <Badge variant="outline">No scans</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {lastScan?.healthScore != null ? (
+                          <span
+                            className={
+                              lastScan.healthScore >= 80
+                                ? "text-emerald-600 font-semibold"
+                                : lastScan.healthScore >= 60
+                                  ? "text-yellow-600 font-semibold"
+                                  : "text-red-600 font-semibold"
+                            }
+                          >
+                            {lastScan.healthScore}/100
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => triggerScan(site.id)}
-                        >
-                          <Play className="h-3 w-3 mr-1" />
-                          Scan Now
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          {lastScan && (
+                            <Link
+                              href={`/scans/${lastScan.id}`}
+                              className="text-primary hover:underline text-sm"
+                            >
+                              Report
+                            </Link>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={triggering === site.id}
+                            onClick={() => triggerScan(site.id)}
+                          >
+                            <Play className="h-3 w-3 mr-1" />
+                            {triggering === site.id ? "..." : "Scan"}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
