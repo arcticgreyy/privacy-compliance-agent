@@ -9,7 +9,7 @@ AI-powered privacy compliance SaaS dashboard. Scans websites with a headless bro
 - **Frontend/API**: Next.js 16 (App Router, TypeScript, Tailwind CSS v4, shadcn/ui with base-ui primitives)
 - **ORM**: Prisma 7 with `@prisma/adapter-pg` (PostgreSQL) — client generated to `src/generated/prisma/`
 - **Scanner**: Playwright (`playwright-core`) — runs in a separate Docker container
-- **AI**: OpenAI or Google Gemini, auto-detected from env vars
+- **AI**: Anthropic Claude, OpenAI, or Google Gemini — auto-detected from env vars (first key found wins: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GOOGLE_GEMINI_API_KEY`)
 - **Queue**: GCP Cloud Tasks with lazy-loaded `@google-cloud/tasks` client
 - **Deployment**: GCP Cloud Run (two services: app + worker)
 
@@ -44,7 +44,7 @@ docker compose up    # Full local stack (Postgres + app + worker)
 
 ## Environment Variables
 
-All defined in `.env.example`. Required for local dev: `DATABASE_URL`, `CRON_SECRET`. Required for AI: `OPENAI_API_KEY` or `GOOGLE_GEMINI_API_KEY`. Required for GCP: `GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_TASKS_QUEUE`, `WORKER_SERVICE_URL`.
+All defined in `.env.example`. Required for local dev: `DATABASE_URL`, `CRON_SECRET`. Required for AI (set at least one): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_GEMINI_API_KEY`. Required for GCP: `GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_TASKS_QUEUE`, `WORKER_SERVICE_URL`.
 
 ## Database Schema
 

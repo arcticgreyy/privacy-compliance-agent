@@ -24,8 +24,12 @@ services:
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@db:5432/privacy_compliance?schema=public"
       CRON_SECRET: "local-dev-secret"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-}"
+      GOOGLE_GEMINI_API_KEY: "${GOOGLE_GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-}"
       WORKER_SERVICE_URL: "http://worker:3000"
     depends_on:
       db:
@@ -38,8 +42,12 @@ services:
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@db:5432/privacy_compliance?schema=public"
       CRON_SECRET: "local-dev-secret"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-}"
+      GOOGLE_GEMINI_API_KEY: "${GOOGLE_GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-}"
     depends_on:
       db:
         condition: service_healthy

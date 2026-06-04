@@ -50,7 +50,7 @@ AI-powered privacy compliance monitoring for web properties. Deploys a headless 
 | Frontend & API | Next.js 16 (App Router, TypeScript, Tailwind CSS v4, shadcn/ui) |
 | Database | PostgreSQL with Prisma 7 ORM |
 | Scanner | Playwright (headless Chromium) in a containerized worker |
-| AI Engine | OpenAI API or Google Gemini (auto-detected from env vars) |
+| AI Engine | Anthropic Claude, OpenAI, or Google Gemini (auto-detected from env vars) |
 | Task Queue | GCP Cloud Tasks with Cloud Scheduler |
 | Deployment | GCP Cloud Run (app + worker containers) |
 
@@ -71,7 +71,7 @@ Organization ──┬── User (OWNER / ADMIN / MEMBER)
 
 - Node.js 22+
 - PostgreSQL 16+
-- An OpenAI or Google Gemini API key
+- An API key for at least one LLM provider: Anthropic, OpenAI, or Google Gemini
 
 ### Local Development
 
@@ -81,7 +81,7 @@ npm install
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your DATABASE_URL, OPENAI_API_KEY, and CRON_SECRET
+# Edit .env with your DATABASE_URL, an AI provider key (ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_GEMINI_API_KEY), and CRON_SECRET
 
 # Create database and apply schema
 npx prisma migrate dev --name init
@@ -97,8 +97,10 @@ Open [http://localhost:3000](http://localhost:3000) to access the dashboard.
 Runs PostgreSQL, the Next.js app, and the Playwright worker together:
 
 ```bash
-# Set your API key
-export OPENAI_API_KEY="sk-..."
+# Set your AI provider key (pick one)
+export ANTHROPIC_API_KEY="sk-ant-..."
+# or: export OPENAI_API_KEY="sk-..."
+# or: export GOOGLE_GEMINI_API_KEY="..."
 
 # Start all services
 docker compose up --build

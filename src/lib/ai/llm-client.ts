@@ -1,7 +1,8 @@
+import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-export type LLMProvider = "openai" | "gemini";
+export type LLMProvider = "anthropic" | "openai" | "gemini";
 
 interface LLMResponse {
   content: string;
@@ -11,11 +12,39 @@ interface LLMResponse {
 }
 
 function getProvider(): LLMProvider {
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
   if (process.env.OPENAI_API_KEY) return "openai";
   if (process.env.GOOGLE_GEMINI_API_KEY) return "gemini";
   throw new Error(
-    "No AI provider configured. Set OPENAI_API_KEY or GOOGLE_GEMINI_API_KEY."
+    "No AI provider configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_GEMINI_API_KEY."
   );
+}
+
+async function callAnthropic(
+  systemPrompt: string,
+  userMessage: string
+): Promise<LLMResponse> {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514";
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: 4096,
+    temperature: 0.1,
+    system: systemPrompt + "\n\nYou must respond with valid JSON only. No markdown, no explanation — just the JSON.",
+    messages: [{ role: "user", content: userMessage }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  return {
+    content: textBlock?.text ?? "{}",
+    provider: "anthropic",
+    model,
+    usage: {
+      promptTokens: response.usage.input_tokens,
+      completionTokens: response.usage.output_tokens,
+    },
+  };
 }
 
 async function callOpenAI(
@@ -90,6 +119,8 @@ export async function queryLLM(
   const provider = getProvider();
 
   switch (provider) {
+    case "anthropic":
+      return callAnthropic(systemPrompt, userMessage);
     case "openai":
       return callOpenAI(systemPrompt, userMessage);
     case "gemini":
