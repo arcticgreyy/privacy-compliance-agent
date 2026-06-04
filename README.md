@@ -1,36 +1,180 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Privacy Compliance Agent
+
+AI-powered privacy compliance monitoring for web properties. Deploys a headless browser to capture third-party tracking scripts, uses LLMs to parse privacy policies, and flags compliance violations — undisclosed trackers, PII leakage, and policy mismatches.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Cloud Scheduler (hourly cron)                                   │
+│         │                                                        │
+│         ▼                                                        │
+│  /api/cron/trigger-scans ──► Cloud Tasks Queue                   │
+│                                      │                           │
+│                                      ▼                           │
+│                             Playwright Worker                    │
+│                             ┌────────────────┐                   │
+│                             │ 1. Navigate URL │                  │
+│                             │ 2. Intercept    │                  │
+│                             │    all requests │                  │
+│                             │ 3. ID trackers  │                  │
+│                             │ 4. Extract      │                  │
+│                             │    privacy      │                  │
+│                             │    policy text  │                  │
+│                             └───────┬────────┘                   │
+│                                     │                            │
+│                                     ▼                            │
+│                             AI Analysis Engine                   │
+│                             ┌────────────────┐                   │
+│                             │ Chain 1: Extract│                  │
+│                             │  disclosed      │                  │
+│                             │  vendors        │                  │
+│                             │                 │                  │
+│                             │ Chain 2: Detect │                  │
+│                             │  PII in network │                  │
+│                             │  payloads       │                  │
+│                             │                 │                  │
+│                             │ Chain 3: Compare│                  │
+│                             │  observed vs    │                  │
+│                             │  disclosed      │                  │
+│                             └───────┬────────┘                   │
+│                                     │                            │
+│                                     ▼                            │
+│                             Dashboard (Next.js)                  │
+│                             Health score · Violations · Reports  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend & API | Next.js 16 (App Router, TypeScript, Tailwind CSS v4, shadcn/ui) |
+| Database | PostgreSQL with Prisma 7 ORM |
+| Scanner | Playwright (headless Chromium) in a containerized worker |
+| AI Engine | OpenAI API or Google Gemini (auto-detected from env vars) |
+| Task Queue | GCP Cloud Tasks with Cloud Scheduler |
+| Deployment | GCP Cloud Run (app + worker containers) |
+
+## Database Schema
+
+```
+Organization ──┬── User (OWNER / ADMIN / MEMBER)
+               └── Website (domain, scan frequency, active status)
+                      └── Scan (PENDING → RUNNING → ANALYZING → COMPLETED)
+                             ├── DisclosedVendor (LLM-extracted from policy)
+                             ├── ObservedTag (Playwright-captured requests)
+                             └── Violation (severity + category + remediation)
+```
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 22+
+- PostgreSQL 16+
+- An OpenAI or Google Gemini API key
+
+### Local Development
 
 ```bash
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your DATABASE_URL, OPENAI_API_KEY, and CRON_SECRET
+
+# Create database and apply schema
+npx prisma migrate dev --name init
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to access the dashboard.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Docker Compose (Full Stack)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Runs PostgreSQL, the Next.js app, and the Playwright worker together:
 
-## Learn More
+```bash
+# Set your API key
+export OPENAI_API_KEY="sk-..."
 
-To learn more about Next.js, take a look at the following resources:
+# Start all services
+docker compose up --build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+├── app/
+│   ├── (dashboard)/          # Dashboard pages (/, /websites, /scans, /settings)
+│   └── api/
+│       ├── cron/             # Cloud Scheduler webhook
+│       ├── dashboard/        # Aggregated stats endpoint
+│       ├── scans/            # Scan CRUD + detail
+│       ├── webhooks/         # Scan completion callback
+│       ├── websites/         # Website CRUD
+│       └── worker/           # Playwright scan execution
+├── components/
+│   ├── dashboard/            # Health ring, severity bar, status badges, nav
+│   ├── ui/                   # shadcn/ui primitives
+│   └── websites/             # Add website dialog
+├── lib/
+│   ├── ai/                   # LLM client, 3 analysis chains, health score
+│   ├── db/                   # Prisma client singleton
+│   ├── queue/                # Cloud Tasks dispatch (with fallbacks)
+│   └── scraper/              # Playwright scanner, vendor patterns, policy extractor
+├── types/                    # Shared TypeScript types
+└── generated/prisma/         # Generated Prisma client (gitignored)
 
-## Deploy on Vercel
+infra/
+├── deploy.sh                 # Build + deploy to Cloud Run
+└── setup-scheduler.sh        # Create Cloud Tasks queue + Cloud Scheduler job
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## GCP Deployment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+# Set required variables
+export GCP_PROJECT_ID="your-project"
+export GCP_REGION="us-central1"
+export CRON_SECRET="your-secret"
+
+# Deploy app + worker to Cloud Run
+bash infra/deploy.sh
+
+# Set up Cloud Tasks queue + hourly Cloud Scheduler job
+bash infra/setup-scheduler.sh
+```
+
+The deploy script creates two Cloud Run services:
+- **privacy-compliance-app** (512Mi, 1 CPU) — dashboard + API
+- **privacy-compliance-worker** (2Gi, 2 CPU, 300s timeout) — Playwright scanner + AI analysis
+
+## Scan Pipeline
+
+1. **Trigger** — Cloud Scheduler calls `/api/cron/trigger-scans` hourly, which checks scan frequencies and creates PENDING scans for due websites.
+2. **Dispatch** — Each scan is pushed to Cloud Tasks (or called directly if Cloud Tasks isn't configured).
+3. **Capture** — The Playwright worker navigates to the target domain, intercepts all outbound network requests, scrolls to trigger lazy-loaded scripts, and identifies third-party tags against 17 known vendor patterns.
+4. **Extract** — The worker finds the privacy policy link on the homepage and extracts its full text.
+5. **Analyze** — Three LLM chains run in sequence:
+   - **Chain 1**: Extract disclosed vendors from the privacy policy text
+   - **Chain 2**: Inspect network payloads for PII leakage (hashed emails, plain-text data)
+   - **Chain 3**: Compare observed trackers against disclosed vendors to produce violations
+6. **Report** — Results are persisted to the database with a 0–100 health score. The dashboard renders violations with severity badges, remediation steps, and an observed-vs-disclosed comparison table.
+
+## Violation Categories
+
+| Category | Severity | Description |
+|----------|----------|-------------|
+| `UNDISCLOSED_TRACKER` | HIGH/MEDIUM | Tracking tag detected but not in privacy policy |
+| `PII_LEAKAGE` | HIGH/MEDIUM/LOW | PII transmitted in network requests |
+| `UNDISCLOSED_DATA_SHARING` | HIGH | Data shared with vendors beyond stated scope |
+| `MISSING_CONSENT` | HIGH | Trackers fire before user consent is obtained |
+| `POLICY_MISMATCH` | MEDIUM | Observed behavior contradicts policy statements |
+
+## License
+
+Private — all rights reserved.
