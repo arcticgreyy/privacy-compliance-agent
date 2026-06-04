@@ -1,0 +1,28 @@
+FROM mcr.microsoft.com/playwright:v1.52.0-noble
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Copy application code
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+COPY src ./src
+COPY tsconfig.json ./
+COPY next.config.ts ./
+COPY components.json ./
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build the Next.js app
+RUN npm run build
+
+EXPOSE 3000
+
+ENV NODE_ENV=production
+ENV BROWSER_WS_ENDPOINT=""
+
+CMD ["npm", "start"]
